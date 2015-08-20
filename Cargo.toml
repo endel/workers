@@ -1,0 +1,13 @@
+[package]
+name = "workers"
+version = "0.1.0"
+authors = ["Endel Dreyer <endel.dreyer@gmail.com>"]
+
+[dependencies]
+curl = "*"
+threadpool = "*"
+
+[dependencies.redis]
+git = "https://github.com/mitsuhiko/redis-rs.git"
+
+# [dev-dependencies]
