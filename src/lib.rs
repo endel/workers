@@ -7,7 +7,7 @@ use std::sync::mpsc::channel;
 
 pub trait Task {
   fn get_name(&self) -> &str;
-  fn perform(&self) -> bool;
+  fn perform(&self, params: &str) -> bool;
 }
 
 pub struct Worker {
@@ -37,23 +37,28 @@ impl Worker {
     let next = self.next_task();
 
     if next.is_ok() {
-      let data = next.unwrap();
-      data.perform();
+      let (task, args) = next.unwrap();
+      task.perform(&args);
     } else {
       println!("Nothing more!");
     }
   }
 
-  fn next_task(&self) -> Result<&Box<Task>, &'static str> {
-    let task_name : redis::RedisResult<String> = self.conn.lpop(format!("{}:tasks", self.prefix));
+  fn next_task(&self) -> Result<(&Box<Task>, String), &'static str> {
+    let next : redis::RedisResult<String> = self.conn.lpop(format!("{}:tasks", self.prefix));
 
     // TODO: it should be a better way to write this
-    if task_name.is_ok() {
-      let r = self.get_task_by_name(task_name.unwrap());
+    if next.is_ok() {
+      let next_payload = next.unwrap();
+      let r = self.get_task_by_name(&next_payload);
+
       if r.is_ok() {
-        Ok(r.unwrap())
+        let task : &Box<Task> = r.unwrap();
+        let args = next_payload[task.get_name().len()+1 .. next_payload.len()].to_string();
+        Ok((task, args))
+
       } else {
-        r
+        Err("Error")
       }
 
     } else {
@@ -61,9 +66,10 @@ impl Worker {
     }
   }
 
-  fn get_task_by_name(&self, name: String) -> Result<&Box<Task>, &'static str> {
+  fn get_task_by_name(&self, name: &str) -> Result<&Box<Task>, &'static str> {
     for task in &self.tasks {
-      if task.get_name() == name {
+      let task_name = name[0..task.get_name().len()].to_string();
+      if task_name == task.get_name() {
         return Ok(task)
       }
     }
