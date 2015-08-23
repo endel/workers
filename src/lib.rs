@@ -77,8 +77,7 @@ impl Worker {
 
   fn get_task_by_name(&self, name: &str) -> Result<&Box<Task>, &'static str> {
     for task in &self.tasks {
-      let task_name = name[0..task.get_name().len()].to_string();
-      if task_name == task.get_name() {
+      if name.starts_with(task.get_name()) {
         return Ok(task)
       }
     }
