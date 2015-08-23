@@ -9,18 +9,17 @@ impl Task for HttpWorker {
     "http_worker"
   }
   fn perform(&self) -> bool {
+    println!("Performing HttpWorker task...");
     true
   }
 }
 
 fn main() {
-  let worker = Worker::new(4);
-  worker.register(HttpWorker);
+  let mut worker = Worker::new(4);
+  worker.register( Box::new(HttpWorker) );
 
   loop {
     worker.work();
-    let w = HttpWorker;
-    println!("What's the name? {}", w.get_name());
     thread::sleep_ms(1000);
   }
 }
