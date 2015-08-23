@@ -1,9 +1,9 @@
 extern crate redis;
 use redis::{Connection, Commands};
 
-extern crate threadpool;
-use threadpool::ThreadPool;
-use std::sync::mpsc::channel;
+// extern crate threadpool;
+// use threadpool::ThreadPool;
+// use std::sync::mpsc::channel;
 
 pub trait Task {
   fn get_name(&self) -> &str;
@@ -21,6 +21,9 @@ impl Worker {
   pub fn new(n : usize) -> Worker {
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let prefix = "workers".to_string();
+
+    // TODO: create threadpool
+
     Worker {
       prefix: prefix,
       conn: client.get_connection().unwrap(),
