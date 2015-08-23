@@ -7,7 +7,7 @@ use std::sync::mpsc::channel;
 
 pub trait Task {
   fn get_name(&self) -> &str;
-  fn perform(&self, params: &str) -> bool;
+  fn perform(&self, params: Result<String, ()>) -> bool;
 }
 
 pub struct Worker {
@@ -38,23 +38,29 @@ impl Worker {
 
     if next.is_ok() {
       let (task, args) = next.unwrap();
-      task.perform(&args);
+      task.perform(args);
     } else {
       println!("Nothing more!");
     }
   }
 
-  fn next_task(&self) -> Result<(&Box<Task>, String), &'static str> {
-    let next : redis::RedisResult<String> = self.conn.lpop(format!("{}:tasks", self.prefix));
+  fn next_task(&self) -> Result<(&Box<Task>, Result<String, ()>), &'static str> {
+    let next : redis::RedisResult<String> = self.conn.rpop(format!("{}:tasks", self.prefix));
 
     // TODO: it should be a better way to write this
     if next.is_ok() {
       let next_payload = next.unwrap();
       let r = self.get_task_by_name(&next_payload);
+      let args : Result<String, ()>;
 
       if r.is_ok() {
         let task : &Box<Task> = r.unwrap();
-        let args = next_payload[task.get_name().len()+1 .. next_payload.len()].to_string();
+        if next_payload.len() > task.get_name().len() {
+          args = Ok(next_payload[task.get_name().len()+1 .. next_payload.len()].to_string());
+        } else {
+          args = Err(());
+        }
+
         Ok((task, args))
 
       } else {

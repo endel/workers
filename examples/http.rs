@@ -9,9 +9,14 @@ use workers::{Task, Worker};
 struct HttpWorker;
 impl Task for HttpWorker {
   fn get_name(&self) -> &str { "http_worker" }
-  fn perform(&self, params: &str) -> bool {
-    let data : Vec<i32> = json::decode(params).unwrap();
-    println!("Performing HttpWorker task: {}", data.len());
+  fn perform(&self, params: Result<String, ()>) -> bool {
+    if params.is_ok() {
+      let data : Vec<i32> = json::decode(&params.unwrap()).unwrap();
+      println!("Performing HttpWorker task: {}", data.len());
+
+    } else {
+      println!("Invalid arguments for this job");
+    }
     true
   }
 }
