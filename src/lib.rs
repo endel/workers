@@ -1,16 +1,17 @@
 extern crate redis;
 use redis::{Connection, Commands};
 
-// extern crate threadpool;
-// use threadpool::ThreadPool;
-// use std::sync::mpsc::channel;
+extern crate threadpool;
+use threadpool::ThreadPool;
+use std::sync::mpsc::channel;
 
-pub trait Task {
+pub trait Task : Sync {
   fn get_name(&self) -> &str;
   fn perform(&self, params: Result<String, ()>) -> bool;
 }
 
 pub struct Worker {
+  pool: ThreadPool,
   prefix: String,
   conn: redis::Connection,
   tasks: Vec<Box<Task>>
@@ -22,9 +23,8 @@ impl Worker {
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let prefix = "workers".to_string();
 
-    // TODO: create threadpool
-
     Worker {
+      pool: ThreadPool::new(n),
       prefix: prefix,
       conn: client.get_connection().unwrap(),
       tasks: Vec::new()
@@ -35,13 +35,23 @@ impl Worker {
     self.tasks.push(t);
   }
 
+  pub fn enqueue(&self, task_name: &str, arguments: &str) {
+    let key = format!("{}:tasks", self.prefix);
+    let val = format!("{}:{}", task_name, arguments);
+    redis::cmd("RPUSH").arg(key).arg(val).execute(&self.conn);
+  }
+
   pub fn work(&self) {
-    println!("Working...");
     let next = self.next_task();
 
     if next.is_ok() {
       let (task, args) = next.unwrap();
+
+      // self.pool.execute(move|| {
+      //   println!("Execute task in a thread... {}", task.get_name());
+      // });
       task.perform(args);
+
     } else {
       println!("Nothing more!");
     }
