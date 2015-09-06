@@ -1,11 +1,14 @@
+// use core::clone::Clone;
+
 extern crate redis;
 use redis::{Connection, Commands};
 
 extern crate threadpool;
 use threadpool::ThreadPool;
 use std::sync::mpsc::channel;
+use std::sync::Mutex;
 
-pub trait Task : Sync {
+pub trait Task : Sync + Send {
   fn get_name(&self) -> &str;
   fn perform(&self, params: Result<String, ()>) -> bool;
 }
@@ -14,7 +17,7 @@ pub struct Worker {
   pool: ThreadPool,
   prefix: String,
   conn: redis::Connection,
-  tasks: Vec<Box<Task>>
+  tasks: Mutex<Vec<Box<Task>>>
 }
 
 impl Worker {
@@ -27,12 +30,12 @@ impl Worker {
       pool: ThreadPool::new(n),
       prefix: prefix,
       conn: client.get_connection().unwrap(),
-      tasks: Vec::new()
+      tasks: Mutex::new(Vec::new())
     }
   }
 
   pub fn register(&mut self, t: Box<Task>) {
-    self.tasks.push(t);
+    self.tasks.lock().unwrap().push(t);
   }
 
   pub fn enqueue(&self, task_name: &str, arguments: &str) {
@@ -47,17 +50,17 @@ impl Worker {
     if next.is_ok() {
       let (task, args) = next.unwrap();
 
-      // self.pool.execute(move|| {
-      //   println!("Execute task in a thread... {}", task.get_name());
-      // });
-      task.perform(args);
+      self.pool.execute(move|| {
+        println!("Execute task in a thread... {}", task.get_name());
+        task.perform(args);
+      });
 
     } else {
       println!("Nothing more!");
     }
   }
 
-  fn next_task(&self) -> Result<(&Box<Task>, Result<String, ()>), &'static str> {
+  fn next_task(&self) -> Result<(Box<Task>, Result<String, ()>), &'static str> {
     let next : redis::RedisResult<String> = self.conn.rpop(format!("{}:tasks", self.prefix));
 
     // TODO: it should be a better way to write this
@@ -67,7 +70,7 @@ impl Worker {
       let args : Result<String, ()>;
 
       if r.is_ok() {
-        let task : &Box<Task> = r.unwrap();
+        let task : Box<Task> = r.unwrap();
         if next_payload.len() > task.get_name().len() {
           args = Ok(next_payload[task.get_name().len()+1 .. next_payload.len()].to_string());
         } else {
@@ -85,13 +88,17 @@ impl Worker {
     }
   }
 
-  fn get_task_by_name(&self, name: &str) -> Result<&Box<Task>, &'static str> {
-    for task in &self.tasks {
-      if name.starts_with(task.get_name()) {
-        return Ok(task)
-      }
+  fn get_task_by_name(&self, name: &str) -> Result<Box<Task>, &'static str> {
+    let mut tasks = self.tasks.lock().unwrap();
+
+    let pos = tasks.iter().position(|t| {
+      name.starts_with(t.get_name())
+    });
+
+    match pos {
+      Some(p) => Ok(tasks.remove(p)),
+      None => Err("Task not found!")
     }
-    Err("Task not found!")
   }
 
 }
